@@ -88,15 +88,40 @@
 
   article {
     background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
-    padding: 24px 22px; font-family: var(--read); font-size: 1.1875rem; line-height: 1.75;
+    padding: 24px 22px; font-family: var(--read);
+    font-size: var(--readsize, 1.1875rem); line-height: 1.75;
     max-width: 100%;
   }
+  @media (max-width: 480px) { article { padding: 18px 16px; } }
   article p { margin: 0 0 1.1em; max-width: 68ch; }
   article p:last-child { margin-bottom: 0; }
   .s { cursor: pointer; border-radius: 3px; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
   .s:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
   .s.now { background: var(--mark); color: var(--mark-ink); }
   .empty { font-family: var(--ui); font-size: 1rem; color: var(--muted); }
+
+  /* ---- Modo lectura: todo lo que no es el libro se aparta ---- */
+  /* Con un documento abierto, la caja de carga se reduce a un boton discreto,
+     las tarjetas de datos desaparecen y las herramientas viven en el menu. */
+  body.reading > header { display: none; }
+  body.reading > main { padding-top: 10px; }
+  body.reading .drop { border: 0; background: none; padding: 0; text-align: left; }
+  body.reading .drop p, body.reading .drop strong { display: none; }
+  body.reading .drop .btn {
+    background: none; color: var(--muted); border: 1px solid var(--line);
+    padding: 6px 12px; font-size: .85rem; font-weight: 500;
+  }
+  body.reading #loader { margin-bottom: 2px; }
+  body.reading .status:empty { display: none; margin: 0; min-height: 0; }
+  body.reading .stats { display: none; }
+  body.reading .notebar { display: none; }
+  body.reading main { padding-top: 4px; }
+  .docbar .pctnow { color: var(--muted); font-size: .9rem; font-weight: 700; }
+  .menusep { height: 1px; background: var(--line); margin: 2px 0; }
+  .menuhead { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 2px 2px 0; }
+  .optsbtn { font-size: .85rem; padding: 5px 14px; justify-self: center; }
+  .sizer { display: flex; gap: 6px; }
+  .sizer .tool { padding: 4px 12px; font-weight: 700; }
 
   .stats {
     display: flex; gap: 12px; margin: 0 0 12px;
@@ -348,7 +373,8 @@
         <svg viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM4 6l10.5 6L4 18z"/></svg>
       </button>
     </div>
-    <div class="opts">
+    <button class="ghost optsbtn" id="optsBtn" type="button" aria-expanded="false" aria-controls="opts">Ajustes de lectura</button>
+    <div class="opts" id="opts" hidden>
       <label>Voz
         <select id="voice"></select>
       </label>
@@ -366,6 +392,13 @@
             <option value="spa+eng">Esp. + ing.</option>
           </select>
         </label>
+      </div>
+      <div class="ocrrow">
+        <span class="ocrlab">Tamaño del texto</span>
+        <span class="sizer">
+          <button class="tool" id="sizeDown" type="button" aria-label="Texto más pequeño">A−</button>
+          <button class="tool" id="sizeUp" type="button" aria-label="Texto más grande">A+</button>
+        </span>
       </div>
       <div class="ocrbar" id="ocrBar" hidden><i id="ocrBarI"></i></div>
     </div>
@@ -397,10 +430,27 @@
     noteCopy: $("noteCopy"), noteMsg2: $("noteMsg2"), noteClose: $("noteClose"),
     ocrOn: $("ocrOn"), ocrLang: $("ocrLang"), ocrLangLab: $("ocrLangLab"),
     ocrBar: $("ocrBar"), ocrBarI: $("ocrBarI"),
-    shot: $("shot")
+    shot: $("shot"), optsBtn: $("optsBtn"), opts: $("opts"),
+    sizeUp: $("sizeUp"), sizeDown: $("sizeDown"),
+    docbar: document.querySelector(".docbar")
   };
 
   const syncOcrUi = () => { el.ocrLangLab.hidden = !el.ocrOn.checked; };
+
+  /* ---------- Reparto de la pantalla ----------
+     Las herramientas que antes ocupaban sitio permanente (notas, olvidar el
+     documento) pasan al menú de tres puntos. Se MUEVEN los mismos elementos,
+     no se duplican, así que conservan su comportamiento. */
+  (function moveToolsIntoMenu() {
+    const sep = () => { const d = document.createElement("div"); d.className = "menusep"; return d; };
+    const head = (t) => { const d = document.createElement("div"); d.className = "menuhead"; d.textContent = t; return d; };
+    el.ulMenu.append(sep(), head("Notas"), el.noteToggle, el.noteAll, sep(), head("Documento"), el.forget);
+    el.forget.classList.add("tool");
+    el.forget.textContent = "Olvidar el documento guardado";
+    // El porcentaje leído se queda en la barra del documento, en una línea fina
+    el.pct.classList.add("pctnow");
+    el.docbar.appendChild(el.pct);
+  })();
 
   const ICON_PLAY = '<path d="M8 5v14l11-7z"/>';
   const ICON_PAUSE = '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>';
@@ -557,6 +607,14 @@
     el.doc.hidden = false;
     el.player.hidden = false;
     el.forget.hidden = false;
+    if (!document.body.classList.contains("reading")) {
+      document.body.classList.add("reading");
+      // El boton de tema deja la cabecera (que se oculta) y pasa al menu
+      el.themeBtn.classList.add("tool");
+      el.themeBtn.textContent = "Cambiar tema claro u oscuro";
+      el.ulMenu.appendChild(el.themeBtn);
+    }
+    el.pick.textContent = "Abrir otro documento";
     syncPlayerSpace();
     el.drop.querySelector("strong").textContent = "Abrir otro documento";
     setStatus("");
@@ -1575,6 +1633,33 @@
       if (voices.length || ++voiceTries > 12) clearInterval(voiceTimer); else loadVoices();
     }, 300);
   }
+
+  /* ---------- Ajustes plegables: por defecto, solo se ven los botones ---------- */
+  function setOpts(open) {
+    el.opts.hidden = !open;
+    el.optsBtn.setAttribute("aria-expanded", String(open));
+    el.optsBtn.textContent = open ? "Ocultar ajustes" : "Ajustes de lectura";
+    syncPlayerSpace();
+    try { localStorage.setItem("lectorpdf-opts", open ? "1" : "0"); } catch (e) { /* nada */ }
+  }
+  el.optsBtn.addEventListener("click", () => setOpts(el.opts.hidden));
+  try { setOpts(localStorage.getItem("lectorpdf-opts") === "1"); } catch (e) { setOpts(false); }
+
+  /* ---------- Tamaño del texto ---------- */
+  let readSize = 1.1875;
+  function applySize() {
+    document.documentElement.style.setProperty("--readsize", readSize.toFixed(4) + "rem");
+    el.sizeDown.disabled = readSize <= 0.95;
+    el.sizeUp.disabled = readSize >= 1.75;
+    try { localStorage.setItem("lectorpdf-size", String(readSize)); } catch (e) { /* nada */ }
+  }
+  el.sizeUp.addEventListener("click", () => { readSize = Math.min(1.75, readSize + 0.0625); applySize(); });
+  el.sizeDown.addEventListener("click", () => { readSize = Math.max(0.95, readSize - 0.0625); applySize(); });
+  try {
+    const sv = parseFloat(localStorage.getItem("lectorpdf-size"));
+    if (sv >= 0.95 && sv <= 1.75) readSize = sv;
+  } catch (e) { /* nada */ }
+  applySize();
 
   el.rate.addEventListener("input", () => {
     el.rateVal.textContent = parseFloat(el.rate.value).toFixed(1) + "×";
