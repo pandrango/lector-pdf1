@@ -59,7 +59,7 @@
     padding: 6px 12px; cursor: pointer; color: var(--muted);
   }
 
-  main { max-width: 760px; margin: 0 auto; padding: 8px 16px 220px; }
+  main { max-width: 760px; margin: 0 auto; padding: 8px 16px calc(var(--playerh, 220px) + 28px); }
 
   /* Zona de carga */
   .drop {
@@ -88,15 +88,40 @@
 
   article {
     background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
-    padding: 24px 22px; font-family: var(--read); font-size: 1.1875rem; line-height: 1.75;
+    padding: 24px 22px; font-family: var(--read);
+    font-size: var(--readsize, 1.1875rem); line-height: 1.75;
     max-width: 100%;
   }
+  @media (max-width: 480px) { article { padding: 18px 16px; } }
   article p { margin: 0 0 1.1em; max-width: 68ch; }
   article p:last-child { margin-bottom: 0; }
   .s { cursor: pointer; border-radius: 3px; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
   .s:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
   .s.now { background: var(--mark); color: var(--mark-ink); }
   .empty { font-family: var(--ui); font-size: 1rem; color: var(--muted); }
+
+  /* ---- Modo lectura: todo lo que no es el libro se aparta ---- */
+  /* Con un documento abierto, la caja de carga se reduce a un boton discreto,
+     las tarjetas de datos desaparecen y las herramientas viven en el menu. */
+  body.reading > header { display: none; }
+  body.reading > main { padding-top: 10px; }
+  body.reading .drop { border: 0; background: none; padding: 0; text-align: left; }
+  body.reading .drop p, body.reading .drop strong { display: none; }
+  body.reading .drop .btn {
+    background: none; color: var(--muted); border: 1px solid var(--line);
+    padding: 6px 12px; font-size: .85rem; font-weight: 500;
+  }
+  body.reading #loader { margin-bottom: 2px; }
+  body.reading .status:empty { display: none; margin: 0; min-height: 0; }
+  body.reading .stats { display: none; }
+  body.reading .notebar { display: none; }
+  body.reading main { padding-top: 4px; }
+  .docbar .pctnow { color: var(--muted); font-size: .9rem; font-weight: 700; }
+  .menusep { height: 1px; background: var(--line); margin: 2px 0; }
+  .menuhead { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 2px 2px 0; }
+  .optsbtn { font-size: .85rem; padding: 5px 14px; justify-self: center; }
+  .sizer { display: flex; gap: 6px; }
+  .sizer .tool { padding: 4px 12px; font-weight: 700; }
 
   .stats {
     display: flex; gap: 12px; margin: 0 0 12px;
@@ -195,8 +220,16 @@
   .nitem .meta { color: var(--muted); font-size: .8rem; }
 
   /* OCR */
-  .ocrlab { grid-column: 1 / -1; flex-direction: row !important; align-items: center; gap: 8px !important; }
+  .ocrrow {
+    grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center;
+    justify-content: space-between; gap: 6px 14px;
+  }
+  .ocrlab, .ocrsel {
+    display: flex !important; flex-direction: row !important; align-items: center;
+    gap: 8px !important; font-size: .8rem; color: var(--muted); margin: 0;
+  }
   .ocrlab input { accent-color: var(--accent); width: 18px; height: 18px; flex: none; }
+  .ocrsel select { width: auto; }
   .ocrbar { height: 4px; margin: 8px 0 0; background: var(--line); border-radius: 2px; overflow: hidden; }
   .ocrbar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
   .thumb { max-width: 100%; border: 1px solid var(--line); border-radius: 8px; margin: 0 0 12px; display: block; }
@@ -340,23 +373,33 @@
         <svg viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM4 6l10.5 6L4 18z"/></svg>
       </button>
     </div>
-    <div class="opts">
+    <button class="ghost optsbtn" id="optsBtn" type="button" aria-expanded="false" aria-controls="opts">Ajustes de lectura</button>
+    <div class="opts" id="opts" hidden>
       <label>Voz
         <select id="voice"></select>
       </label>
       <label>Velocidad: <span id="rateVal">1.0×</span>
         <input type="range" id="rate" min="0.6" max="2" step="0.1" value="1">
       </label>
-      <label class="ocrlab"><input type="checkbox" id="ocrOn" checked>
-        Leer páginas escaneadas y fotos con reconocimiento de texto (OCR)
-      </label>
-      <label>Idioma del OCR
-        <select id="ocrLang">
-          <option value="spa" selected>Español</option>
-          <option value="eng">Inglés</option>
-          <option value="spa+eng">Español + inglés</option>
-        </select>
-      </label>
+      <div class="ocrrow">
+        <label class="ocrlab"><input type="checkbox" id="ocrOn" checked>
+          Leer escaneados y fotos (OCR)
+        </label>
+        <label class="ocrsel" id="ocrLangLab">Idioma
+          <select id="ocrLang">
+            <option value="spa" selected>Español</option>
+            <option value="eng">Inglés</option>
+            <option value="spa+eng">Esp. + ing.</option>
+          </select>
+        </label>
+      </div>
+      <div class="ocrrow">
+        <span class="ocrlab">Tamaño del texto</span>
+        <span class="sizer">
+          <button class="tool" id="sizeDown" type="button" aria-label="Texto más pequeño">A−</button>
+          <button class="tool" id="sizeUp" type="button" aria-label="Texto más grande">A+</button>
+        </span>
+      </div>
       <div class="ocrbar" id="ocrBar" hidden><i id="ocrBarI"></i></div>
     </div>
   </div>
@@ -385,9 +428,29 @@
     noteText: $("noteText"), notePage: $("notePage"), noteDel: $("noteDel"),
     noteMsg: $("noteMsg"), notePanel: $("notePanel"), noteItems: $("noteItems"),
     noteCopy: $("noteCopy"), noteMsg2: $("noteMsg2"), noteClose: $("noteClose"),
-    ocrOn: $("ocrOn"), ocrLang: $("ocrLang"), ocrBar: $("ocrBar"), ocrBarI: $("ocrBarI"),
-    shot: $("shot")
+    ocrOn: $("ocrOn"), ocrLang: $("ocrLang"), ocrLangLab: $("ocrLangLab"),
+    ocrBar: $("ocrBar"), ocrBarI: $("ocrBarI"),
+    shot: $("shot"), optsBtn: $("optsBtn"), opts: $("opts"),
+    sizeUp: $("sizeUp"), sizeDown: $("sizeDown"),
+    docbar: document.querySelector(".docbar")
   };
+
+  const syncOcrUi = () => { el.ocrLangLab.hidden = !el.ocrOn.checked; };
+
+  /* ---------- Reparto de la pantalla ----------
+     Las herramientas que antes ocupaban sitio permanente (notas, olvidar el
+     documento) pasan al menú de tres puntos. Se MUEVEN los mismos elementos,
+     no se duplican, así que conservan su comportamiento. */
+  (function moveToolsIntoMenu() {
+    const sep = () => { const d = document.createElement("div"); d.className = "menusep"; return d; };
+    const head = (t) => { const d = document.createElement("div"); d.className = "menuhead"; d.textContent = t; return d; };
+    el.ulMenu.append(sep(), head("Notas"), el.noteToggle, el.noteAll, sep(), head("Documento"), el.forget);
+    el.forget.classList.add("tool");
+    el.forget.textContent = "Olvidar el documento guardado";
+    // El porcentaje leído se queda en la barra del documento, en una línea fina
+    el.pct.classList.add("pctnow");
+    el.docbar.appendChild(el.pct);
+  })();
 
   const ICON_PLAY = '<path d="M8 5v14l11-7z"/>';
   const ICON_PAUSE = '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>';
@@ -420,13 +483,41 @@
     el.status.classList.toggle("err", !!isErr);
   }
 
-  /* ---------- Carga del PDF ---------- */
-  if (!window.pdfjsLib) {
-    setStatus("No se pudo cargar el lector de PDF. Comprueba tu conexión y recarga la página.", true);
-  } else {
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  /* ---------- Carga del lector de PDF ---------- */
+  // pdf.js viene de internet. Si la red falla o el CDN está bloqueado, se reintenta
+  // con un segundo CDN y, si tampoco, se dice CLARAMENTE que el problema es ese y
+  // no el archivo del usuario.
+  const PDFJS = [
+    { lib: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js",
+      worker: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js" },
+    { lib: "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js",
+      worker: "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js" }
+  ];
+  let pdfjsReady = false;
+
+  function usePdfjs(i) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS[i].worker;
+    pdfjsReady = true;
   }
+  async function ensurePdfjs() {
+    if (pdfjsReady) return true;
+    if (window.pdfjsLib) { usePdfjs(0); return true; }
+    for (let i = 0; i < PDFJS.length; i++) {
+      try {
+        await loadScript(PDFJS[i].lib);
+        if (window.pdfjsLib) { usePdfjs(i); return true; }
+      } catch (e) { /* se prueba el siguiente CDN */ }
+    }
+    return false;
+  }
+  function pdfjsError() {
+    setStatus("No se pudo cargar el lector de PDF desde internet, así que la app no puede abrir " +
+      "ningún PDF. No es culpa de tu archivo. Comprueba la conexión y recarga la página; si estás en " +
+      "una red con restricciones, puede estar bloqueando cdnjs.cloudflare.com y cdn.jsdelivr.net. " +
+      "Las imágenes (fotos de páginas) sí se pueden leer sin eso.", true);
+  }
+  if (window.pdfjsLib) usePdfjs(0);
+  else ensurePdfjs().then((okk) => { if (!okk) pdfjsError(); });
 
   el.pick.addEventListener("click", () => el.file.click());
   el.file.addEventListener("change", () => { if (el.file.files.length) openFiles(el.file.files); });
@@ -462,6 +553,7 @@
       if (pdfs.length) {
         if (pdfs.length > 1) setStatus("Solo se puede abrir un PDF a la vez: se abrirá «" + pdfs[0].name + "».");
         else setStatus("Abriendo el documento…");
+        if (!(await ensurePdfjs())) { pdfjsError(); return; }
         const buf = await pdfs[0].arrayBuffer();
         await loadDocument(buf, pdfs[0].name, pdfs[0].size, true);
       } else {
@@ -515,6 +607,15 @@
     el.doc.hidden = false;
     el.player.hidden = false;
     el.forget.hidden = false;
+    if (!document.body.classList.contains("reading")) {
+      document.body.classList.add("reading");
+      // El boton de tema deja la cabecera (que se oculta) y pasa al menu
+      el.themeBtn.classList.add("tool");
+      el.themeBtn.textContent = "Cambiar tema claro u oscuro";
+      el.ulMenu.appendChild(el.themeBtn);
+    }
+    el.pick.textContent = "Abrir otro documento";
+    syncPlayerSpace();
     el.drop.querySelector("strong").textContent = "Abrir otro documento";
     setStatus("");
     const saved = loadPos();
@@ -523,8 +624,27 @@
       showResume();
     } else {
       hideResume();
-      await showPage(1);
+      const start = await firstReadablePage();
+      await showPage(start);
+      if (start > 1) {
+        setStatus("Las primeras " + (start - 1) + (start === 2 ? " página no tiene" : " páginas no tienen") +
+          " texto (suele ser la portada o imágenes): la lectura empieza en la página " + start + ".");
+      }
     }
+  }
+
+  // Muchos libros empiezan con una portada en imagen. Si se abriera ahí, parecería
+  // que la app no funciona, asi que se busca la primera pagina con texto de verdad.
+  async function firstReadablePage() {
+    // Con el OCR encendido cada intento cuesta segundos: se miran muy pocas paginas
+    const limit = Math.min(state.pages, el.ocrOn.checked ? 3 : 12);
+    for (let i = 1; i <= limit; i++) {
+      try {
+        const paras = await extractPage(i);
+        if (paras.length) return i;
+      } catch (e) { return 1; }
+    }
+    return 1;
   }
 
   function keepForLater(rec) {
@@ -604,6 +724,7 @@
       if (rec.kind === "img" && rec.imgs && rec.imgs.length) {
         await loadImages(rec.imgs, rec.name, rec.size, false);
       } else {
+        if (!(await ensurePdfjs())) { pdfjsError(); return; }
         await loadDocument(rec.data, rec.name, rec.size, false);
       }
     } catch (e) {
@@ -733,7 +854,9 @@
   }
 
   async function runOcr(n) {
-    setStatus("Reconociendo el texto de la página " + n + "… la primera vez descarga el idioma (unos 2 MB).");
+    const myDoc = state.key;
+    const say = (msg, err) => { if (state.key === myDoc) setStatus(msg, err); };
+    say("Reconociendo el texto de la página " + n + "… la primera vez descarga el idioma (unos 2 MB).");
     ocrProgress(0);
     try {
       const canvas = state.kind === "img" ? await imageCanvas(n) : await pdfPageCanvas(n);
@@ -741,11 +864,11 @@
       const out = await w.recognize(canvas);
       const paras = ocrToParagraphs((out && out.data && out.data.text) || "");
       if (paras.length) state.ocrPages.add(n);
-      setStatus(paras.length ? "" : "El reconocimiento de texto no encontró palabras legibles en la página " + n + ".");
+      say(paras.length ? "" : "El reconocimiento de texto no encontró palabras legibles en la página " + n + ".");
       return paras;
     } catch (e) {
       console.error(e);
-      setStatus("No se pudo reconocer el texto de la página " + n + ": " +
+      say("No se pudo reconocer el texto de la página " + n + ": " +
         (e && e.message ? e.message : "fallo del OCR") +
         ". Comprueba tu conexión (el OCR se descarga de internet la primera vez).", true);
       return [];
@@ -822,6 +945,8 @@
     if (state.pdf || state.imgs.length) await showPage(state.page, state.idx);
   }
   el.ocrOn.addEventListener("change", () => {
+    syncOcrUi();
+    syncPlayerSpace();
     try { localStorage.setItem("lectorpdf-ocr", el.ocrOn.checked ? "1" : "0"); } catch (e) { /* nada */ }
     pause();
     resetOcr();
@@ -838,6 +963,7 @@
     const lg = localStorage.getItem("lectorpdf-ocrlang");
     if (lg && ["spa", "eng", "spa+eng"].indexOf(lg) >= 0) el.ocrLang.value = lg;
   } catch (e) { /* nada */ }
+  syncOcrUi();
 
   function splitSentences(par) {
     const parts = par.match(/[^.!?…¡¿]*[.!?…]+["'”»)\]]*\s*|[^.!?…]+$/g) || [par];
@@ -871,13 +997,7 @@
     state.sentences = [];
     state.spans = [];
     if (!paras.length) {
-      el.text.innerHTML = el.ocrOn.checked
-        ? '<p class="empty">No se encontró texto legible en esta página, ni siquiera con el ' +
-          'reconocimiento de texto. Si es una foto, prueba con una más nítida, bien iluminada y recta, ' +
-          'o comprueba que el idioma del OCR sea el del libro.</p>'
-        : '<p class="empty">Esta página no tiene texto seleccionable: parece escaneada o es una imagen. ' +
-          'Activa «Leer páginas escaneadas y fotos con reconocimiento de texto (OCR)» en los ajustes de abajo ' +
-          'para que la app la lea.</p>';
+      showEmptyPage();
       if (!el.ocrOn.checked) checkScanned();
       updateProgress();
       return;
@@ -907,6 +1027,34 @@
     mark();
     updateProgress();
     window.scrollTo({ top: 0 });
+  }
+
+  // Pagina sin texto: explicarlo y, si el OCR esta apagado, ofrecer encenderlo aqui
+  // mismo (el interruptor de los ajustes no se ve hasta abrir un documento).
+  function showEmptyPage() {
+    el.text.textContent = "";
+    const msg = document.createElement("p");
+    msg.className = "empty";
+    if (el.ocrOn.checked) {
+      msg.textContent = "No se encontró texto legible en esta página, ni siquiera con el reconocimiento " +
+        "de texto. Si es una foto, prueba con otra más nítida, bien iluminada y recta, o comprueba que el " +
+        "idioma del OCR sea el del libro.";
+      el.text.appendChild(msg);
+      return;
+    }
+    msg.textContent = "Esta página no tiene texto seleccionable: es una imagen o está escaneada. " +
+      "Puede ser solo la portada: prueba a pasar de página. Si todo el libro es así, enciende el " +
+      "reconocimiento de texto:";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "tool";
+    btn.style.marginTop = "10px";
+    btn.textContent = "Activar el reconocimiento de texto (OCR)";
+    btn.addEventListener("click", () => {
+      el.ocrOn.checked = true;
+      el.ocrOn.dispatchEvent(new Event("change"));
+    });
+    el.text.append(msg, btn);
   }
 
   let shotUrl = "";
@@ -1486,6 +1634,33 @@
     }, 300);
   }
 
+  /* ---------- Ajustes plegables: por defecto, solo se ven los botones ---------- */
+  function setOpts(open) {
+    el.opts.hidden = !open;
+    el.optsBtn.setAttribute("aria-expanded", String(open));
+    el.optsBtn.textContent = open ? "Ocultar ajustes" : "Ajustes de lectura";
+    syncPlayerSpace();
+    try { localStorage.setItem("lectorpdf-opts", open ? "1" : "0"); } catch (e) { /* nada */ }
+  }
+  el.optsBtn.addEventListener("click", () => setOpts(el.opts.hidden));
+  try { setOpts(localStorage.getItem("lectorpdf-opts") === "1"); } catch (e) { setOpts(false); }
+
+  /* ---------- Tamaño del texto ---------- */
+  let readSize = 1.1875;
+  function applySize() {
+    document.documentElement.style.setProperty("--readsize", readSize.toFixed(4) + "rem");
+    el.sizeDown.disabled = readSize <= 0.95;
+    el.sizeUp.disabled = readSize >= 1.75;
+    try { localStorage.setItem("lectorpdf-size", String(readSize)); } catch (e) { /* nada */ }
+  }
+  el.sizeUp.addEventListener("click", () => { readSize = Math.min(1.75, readSize + 0.0625); applySize(); });
+  el.sizeDown.addEventListener("click", () => { readSize = Math.max(0.95, readSize - 0.0625); applySize(); });
+  try {
+    const sv = parseFloat(localStorage.getItem("lectorpdf-size"));
+    if (sv >= 0.95 && sv <= 1.75) readSize = sv;
+  } catch (e) { /* nada */ }
+  applySize();
+
   el.rate.addEventListener("input", () => {
     el.rateVal.textContent = parseFloat(el.rate.value).toFixed(1) + "×";
   });
@@ -1578,6 +1753,19 @@
       try { navigator.mediaSession.setActionHandler(a, handlers[a]); } catch (e) { /* acción no admitida */ }
     });
   }
+
+  // El reproductor esta fijado abajo y tapa el final del contenido. Se mide su
+  // altura real y se reserva ese hueco, asi crezca o se encoja la barra.
+  function syncPlayerSpace() {
+    const hh = el.player.hidden ? 0 : el.player.offsetHeight;
+    document.documentElement.style.setProperty("--playerh", hh + "px");
+  }
+  if (window.ResizeObserver) {
+    try { new ResizeObserver(syncPlayerSpace).observe(el.player); } catch (e) { /* nada */ }
+  }
+  addEventListener("resize", syncPlayerSpace);
+  addEventListener("orientationchange", syncPlayerSpace);
+  syncPlayerSpace();
 
   function setPlaying(on) {
     state.playing = on;
@@ -1719,8 +1907,8 @@
     setStatus("Error en la app: " + (r && r.message ? r.message : String(r)), true);
   });
 
-  // Al abrir la app, recuperar el último PDF para seguir donde se dejó
-  if (window.pdfjsLib) restoreLast();
+  // Al abrir la app, recuperar el último documento para seguir donde se dejó
+  restoreLast();
 })();
 </script>
 </body>
