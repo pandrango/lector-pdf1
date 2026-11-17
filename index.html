@@ -59,7 +59,7 @@
     padding: 6px 12px; cursor: pointer; color: var(--muted);
   }
 
-  main { max-width: 760px; margin: 0 auto; padding: 8px 16px 220px; }
+  main { max-width: 760px; margin: 0 auto; padding: 8px 16px calc(var(--playerh, 220px) + 28px); }
 
   /* Zona de carga */
   .drop {
@@ -195,8 +195,16 @@
   .nitem .meta { color: var(--muted); font-size: .8rem; }
 
   /* OCR */
-  .ocrlab { grid-column: 1 / -1; flex-direction: row !important; align-items: center; gap: 8px !important; }
+  .ocrrow {
+    grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center;
+    justify-content: space-between; gap: 6px 14px;
+  }
+  .ocrlab, .ocrsel {
+    display: flex !important; flex-direction: row !important; align-items: center;
+    gap: 8px !important; font-size: .8rem; color: var(--muted); margin: 0;
+  }
   .ocrlab input { accent-color: var(--accent); width: 18px; height: 18px; flex: none; }
+  .ocrsel select { width: auto; }
   .ocrbar { height: 4px; margin: 8px 0 0; background: var(--line); border-radius: 2px; overflow: hidden; }
   .ocrbar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
   .thumb { max-width: 100%; border: 1px solid var(--line); border-radius: 8px; margin: 0 0 12px; display: block; }
@@ -347,16 +355,18 @@
       <label>Velocidad: <span id="rateVal">1.0×</span>
         <input type="range" id="rate" min="0.6" max="2" step="0.1" value="1">
       </label>
-      <label class="ocrlab"><input type="checkbox" id="ocrOn" checked>
-        Leer páginas escaneadas y fotos con reconocimiento de texto (OCR)
-      </label>
-      <label>Idioma del OCR
-        <select id="ocrLang">
-          <option value="spa" selected>Español</option>
-          <option value="eng">Inglés</option>
-          <option value="spa+eng">Español + inglés</option>
-        </select>
-      </label>
+      <div class="ocrrow">
+        <label class="ocrlab"><input type="checkbox" id="ocrOn" checked>
+          Leer escaneados y fotos (OCR)
+        </label>
+        <label class="ocrsel" id="ocrLangLab">Idioma
+          <select id="ocrLang">
+            <option value="spa" selected>Español</option>
+            <option value="eng">Inglés</option>
+            <option value="spa+eng">Esp. + ing.</option>
+          </select>
+        </label>
+      </div>
       <div class="ocrbar" id="ocrBar" hidden><i id="ocrBarI"></i></div>
     </div>
   </div>
@@ -385,9 +395,12 @@
     noteText: $("noteText"), notePage: $("notePage"), noteDel: $("noteDel"),
     noteMsg: $("noteMsg"), notePanel: $("notePanel"), noteItems: $("noteItems"),
     noteCopy: $("noteCopy"), noteMsg2: $("noteMsg2"), noteClose: $("noteClose"),
-    ocrOn: $("ocrOn"), ocrLang: $("ocrLang"), ocrBar: $("ocrBar"), ocrBarI: $("ocrBarI"),
+    ocrOn: $("ocrOn"), ocrLang: $("ocrLang"), ocrLangLab: $("ocrLangLab"),
+    ocrBar: $("ocrBar"), ocrBarI: $("ocrBarI"),
     shot: $("shot")
   };
+
+  const syncOcrUi = () => { el.ocrLangLab.hidden = !el.ocrOn.checked; };
 
   const ICON_PLAY = '<path d="M8 5v14l11-7z"/>';
   const ICON_PAUSE = '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>';
@@ -420,13 +433,41 @@
     el.status.classList.toggle("err", !!isErr);
   }
 
-  /* ---------- Carga del PDF ---------- */
-  if (!window.pdfjsLib) {
-    setStatus("No se pudo cargar el lector de PDF. Comprueba tu conexión y recarga la página.", true);
-  } else {
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  /* ---------- Carga del lector de PDF ---------- */
+  // pdf.js viene de internet. Si la red falla o el CDN está bloqueado, se reintenta
+  // con un segundo CDN y, si tampoco, se dice CLARAMENTE que el problema es ese y
+  // no el archivo del usuario.
+  const PDFJS = [
+    { lib: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js",
+      worker: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js" },
+    { lib: "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js",
+      worker: "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js" }
+  ];
+  let pdfjsReady = false;
+
+  function usePdfjs(i) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS[i].worker;
+    pdfjsReady = true;
   }
+  async function ensurePdfjs() {
+    if (pdfjsReady) return true;
+    if (window.pdfjsLib) { usePdfjs(0); return true; }
+    for (let i = 0; i < PDFJS.length; i++) {
+      try {
+        await loadScript(PDFJS[i].lib);
+        if (window.pdfjsLib) { usePdfjs(i); return true; }
+      } catch (e) { /* se prueba el siguiente CDN */ }
+    }
+    return false;
+  }
+  function pdfjsError() {
+    setStatus("No se pudo cargar el lector de PDF desde internet, así que la app no puede abrir " +
+      "ningún PDF. No es culpa de tu archivo. Comprueba la conexión y recarga la página; si estás en " +
+      "una red con restricciones, puede estar bloqueando cdnjs.cloudflare.com y cdn.jsdelivr.net. " +
+      "Las imágenes (fotos de páginas) sí se pueden leer sin eso.", true);
+  }
+  if (window.pdfjsLib) usePdfjs(0);
+  else ensurePdfjs().then((okk) => { if (!okk) pdfjsError(); });
 
   el.pick.addEventListener("click", () => el.file.click());
   el.file.addEventListener("change", () => { if (el.file.files.length) openFiles(el.file.files); });
@@ -462,6 +503,7 @@
       if (pdfs.length) {
         if (pdfs.length > 1) setStatus("Solo se puede abrir un PDF a la vez: se abrirá «" + pdfs[0].name + "».");
         else setStatus("Abriendo el documento…");
+        if (!(await ensurePdfjs())) { pdfjsError(); return; }
         const buf = await pdfs[0].arrayBuffer();
         await loadDocument(buf, pdfs[0].name, pdfs[0].size, true);
       } else {
@@ -515,6 +557,7 @@
     el.doc.hidden = false;
     el.player.hidden = false;
     el.forget.hidden = false;
+    syncPlayerSpace();
     el.drop.querySelector("strong").textContent = "Abrir otro documento";
     setStatus("");
     const saved = loadPos();
@@ -523,8 +566,27 @@
       showResume();
     } else {
       hideResume();
-      await showPage(1);
+      const start = await firstReadablePage();
+      await showPage(start);
+      if (start > 1) {
+        setStatus("Las primeras " + (start - 1) + (start === 2 ? " página no tiene" : " páginas no tienen") +
+          " texto (suele ser la portada o imágenes): la lectura empieza en la página " + start + ".");
+      }
     }
+  }
+
+  // Muchos libros empiezan con una portada en imagen. Si se abriera ahí, parecería
+  // que la app no funciona, asi que se busca la primera pagina con texto de verdad.
+  async function firstReadablePage() {
+    // Con el OCR encendido cada intento cuesta segundos: se miran muy pocas paginas
+    const limit = Math.min(state.pages, el.ocrOn.checked ? 3 : 12);
+    for (let i = 1; i <= limit; i++) {
+      try {
+        const paras = await extractPage(i);
+        if (paras.length) return i;
+      } catch (e) { return 1; }
+    }
+    return 1;
   }
 
   function keepForLater(rec) {
@@ -604,6 +666,7 @@
       if (rec.kind === "img" && rec.imgs && rec.imgs.length) {
         await loadImages(rec.imgs, rec.name, rec.size, false);
       } else {
+        if (!(await ensurePdfjs())) { pdfjsError(); return; }
         await loadDocument(rec.data, rec.name, rec.size, false);
       }
     } catch (e) {
@@ -733,7 +796,9 @@
   }
 
   async function runOcr(n) {
-    setStatus("Reconociendo el texto de la página " + n + "… la primera vez descarga el idioma (unos 2 MB).");
+    const myDoc = state.key;
+    const say = (msg, err) => { if (state.key === myDoc) setStatus(msg, err); };
+    say("Reconociendo el texto de la página " + n + "… la primera vez descarga el idioma (unos 2 MB).");
     ocrProgress(0);
     try {
       const canvas = state.kind === "img" ? await imageCanvas(n) : await pdfPageCanvas(n);
@@ -741,11 +806,11 @@
       const out = await w.recognize(canvas);
       const paras = ocrToParagraphs((out && out.data && out.data.text) || "");
       if (paras.length) state.ocrPages.add(n);
-      setStatus(paras.length ? "" : "El reconocimiento de texto no encontró palabras legibles en la página " + n + ".");
+      say(paras.length ? "" : "El reconocimiento de texto no encontró palabras legibles en la página " + n + ".");
       return paras;
     } catch (e) {
       console.error(e);
-      setStatus("No se pudo reconocer el texto de la página " + n + ": " +
+      say("No se pudo reconocer el texto de la página " + n + ": " +
         (e && e.message ? e.message : "fallo del OCR") +
         ". Comprueba tu conexión (el OCR se descarga de internet la primera vez).", true);
       return [];
@@ -822,6 +887,8 @@
     if (state.pdf || state.imgs.length) await showPage(state.page, state.idx);
   }
   el.ocrOn.addEventListener("change", () => {
+    syncOcrUi();
+    syncPlayerSpace();
     try { localStorage.setItem("lectorpdf-ocr", el.ocrOn.checked ? "1" : "0"); } catch (e) { /* nada */ }
     pause();
     resetOcr();
@@ -838,6 +905,7 @@
     const lg = localStorage.getItem("lectorpdf-ocrlang");
     if (lg && ["spa", "eng", "spa+eng"].indexOf(lg) >= 0) el.ocrLang.value = lg;
   } catch (e) { /* nada */ }
+  syncOcrUi();
 
   function splitSentences(par) {
     const parts = par.match(/[^.!?…¡¿]*[.!?…]+["'”»)\]]*\s*|[^.!?…]+$/g) || [par];
@@ -871,13 +939,7 @@
     state.sentences = [];
     state.spans = [];
     if (!paras.length) {
-      el.text.innerHTML = el.ocrOn.checked
-        ? '<p class="empty">No se encontró texto legible en esta página, ni siquiera con el ' +
-          'reconocimiento de texto. Si es una foto, prueba con una más nítida, bien iluminada y recta, ' +
-          'o comprueba que el idioma del OCR sea el del libro.</p>'
-        : '<p class="empty">Esta página no tiene texto seleccionable: parece escaneada o es una imagen. ' +
-          'Activa «Leer páginas escaneadas y fotos con reconocimiento de texto (OCR)» en los ajustes de abajo ' +
-          'para que la app la lea.</p>';
+      showEmptyPage();
       if (!el.ocrOn.checked) checkScanned();
       updateProgress();
       return;
@@ -907,6 +969,34 @@
     mark();
     updateProgress();
     window.scrollTo({ top: 0 });
+  }
+
+  // Pagina sin texto: explicarlo y, si el OCR esta apagado, ofrecer encenderlo aqui
+  // mismo (el interruptor de los ajustes no se ve hasta abrir un documento).
+  function showEmptyPage() {
+    el.text.textContent = "";
+    const msg = document.createElement("p");
+    msg.className = "empty";
+    if (el.ocrOn.checked) {
+      msg.textContent = "No se encontró texto legible en esta página, ni siquiera con el reconocimiento " +
+        "de texto. Si es una foto, prueba con otra más nítida, bien iluminada y recta, o comprueba que el " +
+        "idioma del OCR sea el del libro.";
+      el.text.appendChild(msg);
+      return;
+    }
+    msg.textContent = "Esta página no tiene texto seleccionable: es una imagen o está escaneada. " +
+      "Puede ser solo la portada: prueba a pasar de página. Si todo el libro es así, enciende el " +
+      "reconocimiento de texto:";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "tool";
+    btn.style.marginTop = "10px";
+    btn.textContent = "Activar el reconocimiento de texto (OCR)";
+    btn.addEventListener("click", () => {
+      el.ocrOn.checked = true;
+      el.ocrOn.dispatchEvent(new Event("change"));
+    });
+    el.text.append(msg, btn);
   }
 
   let shotUrl = "";
@@ -1579,6 +1669,19 @@
     });
   }
 
+  // El reproductor esta fijado abajo y tapa el final del contenido. Se mide su
+  // altura real y se reserva ese hueco, asi crezca o se encoja la barra.
+  function syncPlayerSpace() {
+    const hh = el.player.hidden ? 0 : el.player.offsetHeight;
+    document.documentElement.style.setProperty("--playerh", hh + "px");
+  }
+  if (window.ResizeObserver) {
+    try { new ResizeObserver(syncPlayerSpace).observe(el.player); } catch (e) { /* nada */ }
+  }
+  addEventListener("resize", syncPlayerSpace);
+  addEventListener("orientationchange", syncPlayerSpace);
+  syncPlayerSpace();
+
   function setPlaying(on) {
     state.playing = on;
     el.playIcon.innerHTML = on ? ICON_PAUSE : ICON_PLAY;
@@ -1719,8 +1822,8 @@
     setStatus("Error en la app: " + (r && r.message ? r.message : String(r)), true);
   });
 
-  // Al abrir la app, recuperar el último PDF para seguir donde se dejó
-  if (window.pdfjsLib) restoreLast();
+  // Al abrir la app, recuperar el último documento para seguir donde se dejó
+  restoreLast();
 })();
 </script>
 </body>
