@@ -177,6 +177,30 @@
   .ulitem .meta { color: var(--muted); font-size: .8rem; }
   .ulact { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
 
+  /* Notas por pagina */
+  .notebar { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; }
+  .notebar .tool.has-note { border-color: var(--accent); font-weight: 700; }
+  .notebox {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    padding: 12px 14px; margin: 0 0 12px;
+  }
+  .notebox .nlabel { display: block; font-size: .8rem; color: var(--muted); margin-bottom: 6px; }
+  .notebox textarea {
+    width: 100%; box-sizing: border-box; resize: vertical; min-height: 92px;
+    font-family: var(--ui); font-size: 1rem; line-height: 1.5; color: var(--ink);
+    background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+  }
+  .nitem { border-top: 1px solid var(--line); padding: 10px 0; }
+  .nitem .ntext { margin: 0 0 4px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .98rem; line-height: 1.5; }
+  .nitem .meta { color: var(--muted); font-size: .8rem; }
+
+  /* OCR */
+  .ocrlab { grid-column: 1 / -1; flex-direction: row !important; align-items: center; gap: 8px !important; }
+  .ocrlab input { accent-color: var(--accent); width: 18px; height: 18px; flex: none; }
+  .ocrbar { height: 4px; margin: 8px 0 0; background: var(--line); border-radius: 2px; overflow: hidden; }
+  .ocrbar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  .thumb { max-width: 100%; border: 1px solid var(--line); border-radius: 8px; margin: 0 0 12px; display: block; }
+
   /* Barra de control */
   .player {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
@@ -217,10 +241,11 @@
 <main>
   <section id="loader">
     <div class="drop" id="drop">
-      <strong>Abre un PDF para escucharlo</strong>
-      <p>Arrastra el archivo aquí o elígelo desde tu dispositivo. El archivo no sale de tu navegador.</p>
-      <button class="btn" id="pick" type="button">Elegir PDF</button>
-      <input type="file" id="file" accept="application/pdf,.pdf" hidden>
+      <strong>Abre un PDF o imágenes para escucharlo</strong>
+      <p>Arrastra aquí un PDF, una foto o varias imágenes de páginas, o elígelos desde tu dispositivo.
+      Nada sale de tu navegador: la lectura y el reconocimiento de texto se hacen en este aparato.</p>
+      <button class="btn" id="pick" type="button">Elegir archivos</button>
+      <input type="file" id="file" accept="application/pdf,.pdf,image/*" multiple hidden>
     </div>
     <p class="status" id="status" role="status" aria-live="polite"></p>
     <button class="ghost" id="forget" type="button" hidden>Olvidar el documento guardado en este dispositivo</button>
@@ -268,9 +293,30 @@
         <span class="pageinfo" id="ulMsg" role="status"></span>
       </div>
     </section>
+    <div class="notebar">
+      <button class="tool" id="noteToggle" type="button" aria-expanded="false" aria-controls="noteBox">Nota de esta página</button>
+      <button class="tool" id="noteAll" type="button" aria-expanded="false">Ver todas las notas (0)</button>
+    </div>
+    <div class="notebox" id="noteBox" hidden>
+      <label class="nlabel" for="noteText">Tu nota de la página <span id="notePage">1</span> (se guarda sola en este dispositivo)</label>
+      <textarea id="noteText" rows="4" placeholder="Escribe aquí lo que quieras recordar de esta página…"></textarea>
+      <div class="ulact">
+        <button class="tool" id="noteDel" type="button">Borrar esta nota</button>
+        <span class="pageinfo" id="noteMsg" role="status"></span>
+      </div>
+    </div>
+    <section class="ulpanel" id="notePanel" hidden>
+      <div class="phead"><h2>Todas tus notas</h2><button class="tool" id="noteClose" type="button" aria-label="Cerrar la lista">Cerrar</button></div>
+      <div id="noteItems"></div>
+      <div class="ulact">
+        <button class="tool" id="noteCopy" type="button">Copiar todas</button>
+        <span class="pageinfo" id="noteMsg2" role="status"></span>
+      </div>
+    </section>
+    <img id="shot" class="thumb" alt="Imagen de la página" hidden>
     <article id="text" aria-label="Texto de la página"></article>
   </section>
-<p style="text-align:center;color:var(--muted);font-size:.75rem;margin:24px 0 0">Versión 2026-10-12 b</p>
+<p style="text-align:center;color:var(--muted);font-size:.75rem;margin:24px 0 0">Versión 2026-11-17 · OCR y notas</p>
 </main>
 
 <div class="player" id="player" hidden>
@@ -301,6 +347,17 @@
       <label>Velocidad: <span id="rateVal">1.0×</span>
         <input type="range" id="rate" min="0.6" max="2" step="0.1" value="1">
       </label>
+      <label class="ocrlab"><input type="checkbox" id="ocrOn" checked>
+        Leer páginas escaneadas y fotos con reconocimiento de texto (OCR)
+      </label>
+      <label>Idioma del OCR
+        <select id="ocrLang">
+          <option value="spa" selected>Español</option>
+          <option value="eng">Inglés</option>
+          <option value="spa+eng">Español + inglés</option>
+        </select>
+      </label>
+      <div class="ocrbar" id="ocrBar" hidden><i id="ocrBarI"></i></div>
     </div>
   </div>
 </div>
@@ -323,7 +380,13 @@
     resume: $("resume"), resumeMsg: $("resumeMsg"), restart: $("restart"),
     ulAdd: $("ulAdd"), ulSent: $("ulSent"), ulDel: $("ulDel"), ulList: $("ulList"),
     ulPanel: $("ulPanel"), ulItems: $("ulItems"), ulCopy: $("ulCopy"), ulMsg: $("ulMsg"),
-    ulFab: $("ulFab"), ulMenu: $("ulMenu"), ulClose: $("ulClose"), forget: $("forget")
+    ulFab: $("ulFab"), ulMenu: $("ulMenu"), ulClose: $("ulClose"), forget: $("forget"),
+    noteToggle: $("noteToggle"), noteAll: $("noteAll"), noteBox: $("noteBox"),
+    noteText: $("noteText"), notePage: $("notePage"), noteDel: $("noteDel"),
+    noteMsg: $("noteMsg"), notePanel: $("notePanel"), noteItems: $("noteItems"),
+    noteCopy: $("noteCopy"), noteMsg2: $("noteMsg2"), noteClose: $("noteClose"),
+    ocrOn: $("ocrOn"), ocrLang: $("ocrLang"), ocrBar: $("ocrBar"), ocrBarI: $("ocrBarI"),
+    shot: $("shot")
   };
 
   const ICON_PLAY = '<path d="M8 5v14l11-7z"/>';
@@ -331,13 +394,16 @@
 
   /* ---------- Estado ---------- */
   const state = {
-    pdf: null, name: "", page: 1, pages: 0,
+    kind: "pdf",        // "pdf" o "img" (fotos o capturas de páginas)
+    pdf: null, imgs: [], name: "", page: 1, pages: 0,
     sentences: [],      // frases de la página actual
     spans: [],
     idx: 0,
     playing: false,
-    token: 0,           // invalida callbacks antiguos
-    cache: new Map(), ul: {}, key: "", color: 0    // página -> frases
+    token: 0,           // invalida callbacks antiguos de voz
+    render: 0,          // invalida renderizados de página antiguos
+    cache: new Map(), ocrPages: new Set(),
+    ul: {}, notes: {}, key: "", color: 0    // página -> frases
   };
 
   /* ---------- Tema ---------- */
@@ -363,7 +429,7 @@
   }
 
   el.pick.addEventListener("click", () => el.file.click());
-  el.file.addEventListener("change", () => { if (el.file.files[0]) openFile(el.file.files[0]); });
+  el.file.addEventListener("change", () => { if (el.file.files.length) openFiles(el.file.files); });
   ["dragenter", "dragover"].forEach((ev) => el.drop.addEventListener(ev, (e) => {
     e.preventDefault(); el.drop.classList.add("over");
   }));
@@ -371,20 +437,42 @@
     e.preventDefault(); el.drop.classList.remove("over");
   }));
   el.drop.addEventListener("drop", (e) => {
-    const f = e.dataTransfer.files && e.dataTransfer.files[0];
-    if (f) openFile(f);
+    const fs = e.dataTransfer.files;
+    if (fs && fs.length) openFiles(fs);
   });
 
-  async function openFile(file) {
-    if (!/\.pdf$/i.test(file.name) && file.type !== "application/pdf") {
-      setStatus("Ese archivo no es un PDF. Elige un archivo con extensión .pdf.", true);
+  const isPdf = (f) => /\.pdf$/i.test(f.name) || f.type === "application/pdf";
+  const isImg = (f) => /\.(jpe?g|png|webp|gif|bmp|avif|heic|heif)$/i.test(f.name) ||
+    /^image\//.test(f.type || "");
+
+  async function openFiles(fileList) {
+    const files = Array.from(fileList);
+    const pdfs = files.filter(isPdf);
+    const imgs = files.filter((f) => !isPdf(f) && isImg(f));
+    if (!pdfs.length && !imgs.length) {
+      setStatus("Eso no es un PDF ni una imagen. Elige un archivo .pdf o fotos de las páginas (JPG, PNG…).", true);
+      return;
+    }
+    if (pdfs.length && imgs.length) {
+      setStatus("Has elegido un PDF y también imágenes. Abre primero una cosa y luego la otra.", true);
       return;
     }
     stop();
-    setStatus("Abriendo el documento…");
     try {
-      const buf = await file.arrayBuffer();
-      await loadDocument(buf, file.name, file.size, true);
+      if (pdfs.length) {
+        if (pdfs.length > 1) setStatus("Solo se puede abrir un PDF a la vez: se abrirá «" + pdfs[0].name + "».");
+        else setStatus("Abriendo el documento…");
+        const buf = await pdfs[0].arrayBuffer();
+        await loadDocument(buf, pdfs[0].name, pdfs[0].size, true);
+      } else {
+        setStatus("Preparando " + imgs.length + (imgs.length === 1 ? " imagen…" : " imágenes…"));
+        // Orden natural: pagina2.jpg va antes que pagina10.jpg
+        imgs.sort((a, b) => a.name.localeCompare(b.name, "es", { numeric: true, sensitivity: "base" }));
+        const name = imgs.length === 1 ? imgs[0].name
+          : imgs[0].name + " y " + (imgs.length - 1) + (imgs.length === 2 ? " imagen más" : " imágenes más");
+        const size = imgs.reduce((a, f) => a + f.size, 0);
+        await loadImages(imgs.map((f) => f.slice(0, f.size, f.type || "image/jpeg")), name, size, true);
+      }
     } catch (err) {
       showOpenError(err);
     }
@@ -393,20 +481,41 @@
   async function loadDocument(buf, name, size, persist) {
     // PDF.js se queda con el buffer que recibe: se le entrega siempre una copia
     const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buf.slice(0)) }).promise;
+    state.kind = "pdf";
     state.pdf = pdf;
+    state.imgs = [];
+    await finishOpen(name, size, pdf.numPages);
+    if (persist) keepForLater({ kind: "pdf", name, size, data: buf });
+  }
+
+  async function loadImages(blobs, name, size, persist) {
+    if (!blobs.length) throw new Error("sin imágenes");
+    state.kind = "img";
+    state.pdf = null;
+    state.imgs = blobs;
+    await finishOpen(name, size, blobs.length);
+    if (persist) keepForLater({ kind: "img", name, size, imgs: blobs });
+  }
+
+  async function finishOpen(name, size, pages) {
+    resetNoteBox();
     state.name = name;
-    state.pages = pdf.numPages;
+    state.pages = pages;
     state.cache.clear();
-    state.key = name + "|" + size + "|" + pdf.numPages;
+    state.ocrPages.clear();
+    state.key = name + "|" + size + "|" + pages;
     state.ul = loadUl();
+    state.notes = loadNotes();
     updateUlCount();
+    updateNoteCount();
     closePanel();
+    closeNotePanel();
     el.docname.textContent = name;
-    el.sheets.textContent = pdf.numPages;
+    el.sheets.textContent = pages;
     el.doc.hidden = false;
     el.player.hidden = false;
     el.forget.hidden = false;
-    el.drop.querySelector("strong").textContent = "Abrir otro PDF";
+    el.drop.querySelector("strong").textContent = "Abrir otro documento";
     setStatus("");
     const saved = loadPos();
     if (saved && saved.page >= 1 && saved.page <= state.pages && (saved.page > 1 || saved.idx > 0)) {
@@ -416,10 +525,11 @@
       hideResume();
       await showPage(1);
     }
-    if (persist) {
-      saveLastPdf({ name, size, data: buf });
-      if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
-    }
+  }
+
+  function keepForLater(rec) {
+    saveLastPdf(rec);
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   }
 
   function showOpenError(err) {
@@ -431,7 +541,7 @@
     } else if (n === "InvalidPDFException") {
       msg = "El archivo no parece un PDF válido o está dañado. Prueba con otro.";
     } else {
-      msg = "No se pudo abrir el PDF por un fallo técnico de la app, no necesariamente del archivo. " +
+      msg = "No se pudo abrir el documento por un fallo técnico de la app, no necesariamente del archivo. " +
         "Recarga la página e inténtalo de nuevo.";
     }
     const detail = n !== "PasswordException" && n !== "InvalidPDFException"
@@ -488,26 +598,44 @@
   }
   async function restoreLast() {
     const rec = await loadLastPdf();
-    if (!rec || !rec.data) return;
+    if (!rec || (!rec.data && !(rec.imgs && rec.imgs.length))) return;
     setStatus("Recuperando «" + rec.name + "»…");
     try {
-      await loadDocument(rec.data, rec.name, rec.size, false);
+      if (rec.kind === "img" && rec.imgs && rec.imgs.length) {
+        await loadImages(rec.imgs, rec.name, rec.size, false);
+      } else {
+        await loadDocument(rec.data, rec.name, rec.size, false);
+      }
     } catch (e) {
       console.error(e);
       await deleteLastPdf();
       el.forget.hidden = true;
-      setStatus("No se pudo recuperar el último PDF guardado. Ábrelo de nuevo desde tu dispositivo.", true);
+      setStatus("No se pudo recuperar el último documento guardado. Ábrelo de nuevo desde tu dispositivo.", true);
     }
   }
   el.forget.addEventListener("click", async () => {
     await deleteLastPdf();
     el.forget.hidden = true;
-    setStatus("Listo: el PDF ya no está guardado en este dispositivo. Tus subrayados y tu posición se conservan.");
+    setStatus("Listo: el documento ya no está guardado en este dispositivo. " +
+      "Tus subrayados, tus notas y tu posición de lectura se conservan.");
   });
 
   /* ---------- Extracción de texto ---------- */
   async function extractPage(n) {
     if (state.cache.has(n)) return state.cache.get(n);
+    let result;
+    if (state.kind === "img") {
+      // Una foto o captura nunca trae texto: siempre pasa por OCR
+      result = el.ocrOn.checked ? await ocrPage(n) : [];
+    } else {
+      result = await extractPdfText(n);
+      if (!result.length && el.ocrOn.checked) result = await ocrPage(n);
+    }
+    state.cache.set(n, result);
+    return result;
+  }
+
+  async function extractPdfText(n) {
     const page = await state.pdf.getPage(n);
     const content = await page.getTextContent();
 
@@ -542,10 +670,174 @@
     }
     if (buf) paragraphs.push(buf);
 
-    const result = paragraphs.map(splitSentences).filter((p) => p.length);
-    state.cache.set(n, result);
-    return result;
+    return paragraphs.map(splitSentences).filter((p) => p.length);
   }
+
+  /* ---------- OCR: páginas escaneadas y fotos ---------- */
+  // Tesseract.js se descarga solo la primera vez que hace falta, no al abrir la app.
+  const TESS_JS = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
+  const TESS_WORKER = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js";
+  const TESS_CORE = "https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.0/";
+  const TESS_DATA = "https://tessdata.projectnaptha.com/4.0.0_fast";
+  let ocrWorker = null, ocrWorkerLang = "", ocrStarting = null, ocrQueue = Promise.resolve();
+
+  function loadScript(src) {
+    return new Promise((res, rej) => {
+      if (document.querySelector('script[data-src="' + src + '"]')) return res();
+      const s = document.createElement("script");
+      s.src = src;
+      s.dataset.src = src;
+      s.onload = () => res();
+      s.onerror = () => rej(new Error("no se pudo descargar el reconocedor de texto"));
+      document.head.appendChild(s);
+    });
+  }
+
+  function ocrProgress(frac) {
+    if (frac == null) { el.ocrBar.hidden = true; return; }
+    el.ocrBar.hidden = false;
+    el.ocrBarI.style.width = Math.round(Math.max(0, Math.min(1, frac)) * 100) + "%";
+  }
+
+  async function getOcrWorker() {
+    const lang = el.ocrLang.value || "spa";
+    if (ocrWorker && ocrWorkerLang === lang) return ocrWorker;
+    if (ocrStarting) return ocrStarting;
+    ocrStarting = (async () => {
+      if (ocrWorker) { try { await ocrWorker.terminate(); } catch (e) { /* nada */ } ocrWorker = null; }
+      await loadScript(TESS_JS);
+      if (!window.Tesseract) throw new Error("no se pudo cargar el reconocedor de texto");
+      const w = await Tesseract.createWorker(lang, 1, {
+        workerPath: TESS_WORKER,
+        corePath: TESS_CORE,
+        langPath: TESS_DATA,
+        logger: (m) => {
+          if (m && m.status === "recognizing text") ocrProgress(m.progress);
+          else if (m && /loading|initializ/i.test(m.status || "")) ocrProgress(0);
+        }
+      });
+      ocrWorker = w;
+      ocrWorkerLang = lang;
+      return w;
+    })().catch((e) => { ocrStarting = null; throw e; });
+    const w = await ocrStarting;
+    ocrStarting = null;
+    return w;
+  }
+
+  // Un solo trabajo de OCR a la vez: así los mensajes de progreso tienen sentido
+  function ocrPage(n) {
+    const job = ocrQueue.then(() => runOcr(n), () => runOcr(n));
+    ocrQueue = job.catch(() => {});
+    return job;
+  }
+
+  async function runOcr(n) {
+    setStatus("Reconociendo el texto de la página " + n + "… la primera vez descarga el idioma (unos 2 MB).");
+    ocrProgress(0);
+    try {
+      const canvas = state.kind === "img" ? await imageCanvas(n) : await pdfPageCanvas(n);
+      const w = await getOcrWorker();
+      const out = await w.recognize(canvas);
+      const paras = ocrToParagraphs((out && out.data && out.data.text) || "");
+      if (paras.length) state.ocrPages.add(n);
+      setStatus(paras.length ? "" : "El reconocimiento de texto no encontró palabras legibles en la página " + n + ".");
+      return paras;
+    } catch (e) {
+      console.error(e);
+      setStatus("No se pudo reconocer el texto de la página " + n + ": " +
+        (e && e.message ? e.message : "fallo del OCR") +
+        ". Comprueba tu conexión (el OCR se descarga de internet la primera vez).", true);
+      return [];
+    } finally {
+      ocrProgress(null);
+    }
+  }
+
+  async function pdfPageCanvas(n) {
+    const page = await state.pdf.getPage(n);
+    const base = page.getViewport({ scale: 1 });
+    // El OCR acierta mucho más con unos 1800 px de ancho
+    const scale = Math.max(1, Math.min(3, 1800 / Math.max(1, base.width)));
+    const vp = page.getViewport({ scale });
+    const c = document.createElement("canvas");
+    c.width = Math.round(vp.width);
+    c.height = Math.round(vp.height);
+    const g = c.getContext("2d");
+    g.fillStyle = "#ffffff";
+    g.fillRect(0, 0, c.width, c.height);
+    await page.render({ canvasContext: g, viewport: vp }).promise;
+    return c;
+  }
+
+  async function imageCanvas(n) {
+    const blob = state.imgs[n - 1];
+    if (!blob) throw new Error("imagen no encontrada");
+    const url = URL.createObjectURL(blob);
+    try {
+      const img = await new Promise((res, rej) => {
+        const i = new Image();
+        i.onload = () => res(i);
+        i.onerror = () => rej(new Error("el navegador no puede abrir esa imagen"));
+        i.src = url;
+      });
+      const wNat = img.naturalWidth || img.width;
+      const hNat = img.naturalHeight || img.height;
+      if (!wNat || !hNat) throw new Error("imagen vacía");
+      const scale = Math.max(0.2, Math.min(3, 1800 / wNat));
+      const c = document.createElement("canvas");
+      c.width = Math.round(wNat * scale);
+      c.height = Math.round(hNat * scale);
+      const g = c.getContext("2d");
+      g.fillStyle = "#ffffff";
+      g.fillRect(0, 0, c.width, c.height);
+      g.drawImage(img, 0, 0, c.width, c.height);
+      return c;
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  function ocrToParagraphs(text) {
+    const out = [];
+    for (const block of String(text).split(/\n\s*\n+/)) {
+      const lines = block.split(/\n/).map((s) => s.replace(/\s+/g, " ").trim()).filter(Boolean);
+      if (!lines.length) continue;
+      let buf = "";
+      for (const ln of lines) {
+        if (buf.endsWith("-") && /[a-záéíóúüñ]$/i.test(buf.slice(0, -1))) buf = buf.slice(0, -1) + ln;
+        else buf = buf ? buf + " " + ln : ln;
+      }
+      // Descartar ruido del escáner: restos de una o dos letras sueltas
+      if (buf.replace(/[^\p{L}\p{N}]/gu, "").length < 3) continue;
+      out.push(buf);
+    }
+    return out.map(splitSentences).filter((pp) => pp.length);
+  }
+
+  // Al cambiar los ajustes de OCR, olvidar lo que se habia extraido y rehacer la pagina
+  async function resetOcr() {
+    state.cache.clear();
+    state.ocrPages.clear();
+    if (state.pdf || state.imgs.length) await showPage(state.page, state.idx);
+  }
+  el.ocrOn.addEventListener("change", () => {
+    try { localStorage.setItem("lectorpdf-ocr", el.ocrOn.checked ? "1" : "0"); } catch (e) { /* nada */ }
+    pause();
+    resetOcr();
+  });
+  el.ocrLang.addEventListener("change", async () => {
+    try { localStorage.setItem("lectorpdf-ocrlang", el.ocrLang.value); } catch (e) { /* nada */ }
+    pause();
+    if (ocrWorker) { try { await ocrWorker.terminate(); } catch (e) { /* nada */ } ocrWorker = null; ocrWorkerLang = ""; }
+    resetOcr();
+  });
+  try {
+    const sv = localStorage.getItem("lectorpdf-ocr");
+    if (sv === "0") el.ocrOn.checked = false;
+    const lg = localStorage.getItem("lectorpdf-ocrlang");
+    if (lg && ["spa", "eng", "spa+eng"].indexOf(lg) >= 0) el.ocrLang.value = lg;
+  } catch (e) { /* nada */ }
 
   function splitSentences(par) {
     const parts = par.match(/[^.!?…¡¿]*[.!?…]+["'”»)\]]*\s*|[^.!?…]+$/g) || [par];
@@ -563,26 +855,36 @@
 
   /* ---------- Mostrar página ---------- */
   async function showPage(n, startIdx) {
+    const my = ++state.render;
     state.page = n;
     el.pageinfo.textContent = "Página " + n + " de " + state.pages;
     el.prevPage.disabled = n <= 1;
     el.nextPage.disabled = n >= state.pages;
     el.text.innerHTML = '<p class="empty">Leyendo la página…</p>';
+    showNoteFor(n);
+    showShot(n);
     const paras = await extractPage(n);
-    if (n !== state.page) return;
+    // Si mientras se extraia el texto se pidio otra pagina, no pisar lo nuevo
+    if (my !== state.render) return;
 
     el.text.textContent = "";
     state.sentences = [];
     state.spans = [];
     if (!paras.length) {
-      el.text.innerHTML = '<p class="empty">Esta página no tiene texto seleccionable. ' +
-        'Si el PDF es un documento escaneado (imágenes), este lector no puede leerlo todavía: ' +
-        'necesita pasar antes por un programa de reconocimiento de texto (OCR).</p>';
-      checkScanned();
+      el.text.innerHTML = el.ocrOn.checked
+        ? '<p class="empty">No se encontró texto legible en esta página, ni siquiera con el ' +
+          'reconocimiento de texto. Si es una foto, prueba con una más nítida, bien iluminada y recta, ' +
+          'o comprueba que el idioma del OCR sea el del libro.</p>'
+        : '<p class="empty">Esta página no tiene texto seleccionable: parece escaneada o es una imagen. ' +
+          'Activa «Leer páginas escaneadas y fotos con reconocimiento de texto (OCR)» en los ajustes de abajo ' +
+          'para que la app la lea.</p>';
+      if (!el.ocrOn.checked) checkScanned();
       updateProgress();
       return;
     }
-    warn("");
+    warn(state.ocrPages.has(n)
+      ? "Texto reconocido por OCR: puede tener algún error de lectura."
+      : "");
     for (const sents of paras) {
       const p = document.createElement("p");
       sents.forEach((s, i) => {
@@ -607,6 +909,16 @@
     window.scrollTo({ top: 0 });
   }
 
+  let shotUrl = "";
+  function showShot(n) {
+    if (shotUrl) { URL.revokeObjectURL(shotUrl); shotUrl = ""; }
+    const blob = state.kind === "img" ? state.imgs[n - 1] : null;
+    if (!blob) { el.shot.hidden = true; el.shot.removeAttribute("src"); return; }
+    shotUrl = URL.createObjectURL(blob);
+    el.shot.src = shotUrl;
+    el.shot.hidden = false;
+  }
+
   async function checkScanned() {
     // Si ninguna de las primeras páginas tiene texto, avisar
     const limit = Math.min(state.pages, 3);
@@ -614,7 +926,7 @@
       const p = await extractPage(i);
       if (p.length) return;
     }
-    warn("Este PDF parece escaneado (solo imágenes): no se puede leer en voz alta sin OCR.");
+    warn("Este PDF parece escaneado (solo imágenes). Activa el OCR en los ajustes para poder escucharlo.");
   }
   /* ---------- Subrayado ---------- */
   let pending = null, pendingTimer = null, panelTok = 0, msgTimer = null;
@@ -780,7 +1092,7 @@
     if (!el.ulMenu.hidden && !el.ulMenu.contains(e.target) && !el.ulFab.contains(e.target)) closeMenu();
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { closeMenu(); closePanel(); }
+    if (e.key === 'Escape') { closeMenu(); closePanel(); closeNotePanel(); }
   });
   document.querySelectorAll('.sw').forEach((b) => b.addEventListener('click', () => {
     state.color = Number(b.dataset.c);
@@ -908,6 +1220,176 @@
       } catch (e2) { ulMessage('No se pudo copiar.'); }
     }
   });
+
+  /* ---------- Notas por página ---------- */
+  let noteTimer = null, noteMsgTimer = null, notePageOfBox = 1;
+  // Lo ultimo que se puso en el cuadro de texto. Sin esto, un cuadro vacio recien
+  // abierto se confundiria con "el usuario borro la nota" y la borraria de verdad.
+  let noteLoaded = "";
+
+  function noteKey() { return "lectorpdf-notes:" + state.key; }
+  function loadNotes() {
+    try {
+      const raw = localStorage.getItem(noteKey());
+      const o = raw ? JSON.parse(raw) : {};
+      if (!o || typeof o !== "object") return {};
+      const clean = {};
+      Object.keys(o).forEach((k) => { if (typeof o[k] === "string" && o[k].trim()) clean[k] = o[k]; });
+      return clean;
+    } catch (e) { return {}; }
+  }
+  function saveNotes() {
+    try { localStorage.setItem(noteKey(), JSON.stringify(state.notes)); return true; }
+    catch (e) { return false; }
+  }
+  function noteCount() { return Object.keys(state.notes).length; }
+  function updateNoteCount() {
+    el.noteAll.textContent = "Ver todas las notas (" + noteCount() + ")";
+    const has = !!state.notes[state.page];
+    el.noteToggle.textContent = has ? "Nota de esta página ●" : "Nota de esta página";
+    el.noteToggle.classList.toggle("has-note", has);
+  }
+  function noteMessage(msg) {
+    el.noteMsg.textContent = msg;
+    clearTimeout(noteMsgTimer);
+    noteMsgTimer = setTimeout(() => { el.noteMsg.textContent = ""; }, 2500);
+  }
+  function showNoteFor(n) {
+    flushNote();
+    notePageOfBox = n;
+    el.notePage.textContent = n;
+    el.noteText.value = state.notes[n] || "";
+    noteLoaded = el.noteText.value;
+    updateNoteCount();
+  }
+  // Guarda de verdad lo que haya en el cuadro de texto, en la pagina que lo escribio
+  function flushNote() {
+    clearTimeout(noteTimer);
+    const txt = el.noteText.value;
+    const pg = notePageOfBox;
+    if (!state.key || txt === noteLoaded) return;
+    noteLoaded = txt;
+    const prev = state.notes[pg] || "";
+    if (txt.trim() === prev.trim()) return;
+    if (txt.trim()) state.notes[pg] = txt; else delete state.notes[pg];
+    const ok = saveNotes();
+    updateNoteCount();
+    if (!el.notePanel.hidden) renderNotePanel();
+    if (!ok) noteMessage("No se pudo guardar: el almacenamiento del navegador está lleno o bloqueado.");
+  }
+  el.noteText.addEventListener("input", () => {
+    clearTimeout(noteTimer);
+    noteTimer = setTimeout(() => { flushNote(); noteMessage("Nota guardada."); }, 700);
+  });
+  el.noteText.addEventListener("blur", () => flushNote());
+  el.noteDel.addEventListener("click", () => {
+    clearTimeout(noteTimer);
+    el.noteText.value = "";
+    noteLoaded = "";
+    delete state.notes[state.page];
+    saveNotes();
+    updateNoteCount();
+    if (!el.notePanel.hidden) renderNotePanel();
+    noteMessage("Nota borrada.");
+  });
+  el.noteToggle.addEventListener("click", () => {
+    const open = el.noteBox.hidden;
+    el.noteBox.hidden = !open;
+    el.noteToggle.setAttribute("aria-expanded", String(open));
+    if (open) { el.noteText.focus(); closeMenu(); }
+  });
+
+  function closeNotePanel() {
+    el.notePanel.hidden = true;
+    el.noteAll.setAttribute("aria-expanded", "false");
+  }
+  el.noteClose.addEventListener("click", () => closeNotePanel());
+  el.noteAll.addEventListener("click", () => {
+    const open = el.notePanel.hidden;
+    el.notePanel.hidden = !open;
+    el.noteAll.setAttribute("aria-expanded", String(open));
+    if (open) { renderNotePanel(); closePanel(); closeMenu(); }
+  });
+
+  function renderNotePanel() {
+    const pages = Object.keys(state.notes).map(Number).sort((a, b) => a - b);
+    const frag = document.createDocumentFragment();
+    if (!pages.length) {
+      const pEmpty = document.createElement("p");
+      pEmpty.className = "empty";
+      pEmpty.textContent = "Todavía no has escrito ninguna nota. Pulsa «Nota de esta página» y escribe lo que quieras recordar.";
+      frag.appendChild(pEmpty);
+    }
+    for (const pg of pages) {
+      const item = document.createElement("div");
+      item.className = "nitem";
+      const t = document.createElement("p");
+      t.className = "ntext";
+      t.textContent = state.notes[pg];
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      meta.textContent = "Página " + pg;
+      const act = document.createElement("div");
+      act.className = "ulact";
+      const go = document.createElement("button");
+      go.type = "button"; go.className = "tool"; go.textContent = "Ir a la página";
+      go.addEventListener("click", async () => {
+        pause();
+        closeNotePanel();
+        await showPage(pg, 0);
+        el.noteBox.hidden = false;
+        el.noteToggle.setAttribute("aria-expanded", "true");
+      });
+      const del = document.createElement("button");
+      del.type = "button"; del.className = "tool"; del.textContent = "Borrar";
+      del.addEventListener("click", () => {
+        delete state.notes[pg];
+        saveNotes();
+        if (pg === state.page) { el.noteText.value = ""; noteLoaded = ""; }
+        updateNoteCount();
+        renderNotePanel();
+      });
+      act.append(go, del);
+      item.append(t, meta, act);
+      frag.appendChild(item);
+    }
+    el.noteItems.replaceChildren(frag);
+  }
+
+  el.noteCopy.addEventListener("click", async () => {
+    flushNote();
+    const pages = Object.keys(state.notes).map(Number).sort((a, b) => a - b);
+    if (!pages.length) { el.noteMsg2.textContent = "No hay notas que copiar."; return; }
+    const all = pages.map((pg) => "Página " + pg + ":\n" + state.notes[pg]).join("\n\n");
+    const done = (ok) => {
+      el.noteMsg2.textContent = ok ? "Copiado." : "No se pudo copiar.";
+      setTimeout(() => { el.noteMsg2.textContent = ""; }, 2500);
+    };
+    try {
+      await navigator.clipboard.writeText(all);
+      done(true);
+    } catch (err) {
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = all;
+        ta.style.position = "fixed"; ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = document.execCommand("copy");
+        ta.remove();
+        done(ok);
+      } catch (e2) { done(false); }
+    }
+  });
+
+  function resetNoteBox() {
+    clearTimeout(noteTimer);
+    notePageOfBox = 1;
+    el.noteText.value = "";
+    noteLoaded = "";
+    el.noteBox.hidden = true;
+    el.noteToggle.setAttribute("aria-expanded", "false");
+  }
 
   /* ---------- Retomar lectura ---------- */
   function posKey() { return "lectorpdf:" + state.key; }
@@ -1216,15 +1698,16 @@
   el.voice.addEventListener("change", () => { if (state.playing) speakCurrent(); });
 
   document.addEventListener("keydown", (e) => {
-    if (e.target.matches("select, input, button")) return;
+    if (e.target.matches("select, input, button, textarea, [contenteditable]")) return;
     if (e.code === "Space" && state.sentences.length) { e.preventDefault(); el.play.click(); }
   });
 
-  window.addEventListener("pagehide", () => { savePos(); if (synth) synth.cancel(); });
+  window.addEventListener("pagehide", () => { flushNote(); savePos(); if (synth) synth.cancel(); });
 
   // Al volver a la app, si la voz se cortó en segundo plano, retomar la frase actual
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden && state.playing && synth && !synth.speaking && !synth.pending) speakCurrent();
+    if (document.hidden) { flushNote(); savePos(); return; }
+    if (state.playing && synth && !synth.speaking && !synth.pending) speakCurrent();
   });
 
   window.addEventListener("error", (e) => {
